@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react"
 import { useSleeper } from "@/lib/sleeper-context"
 import { Users, Trophy, ChevronRight, Loader2 } from "lucide-react"
-import { RosterDisplay } from "./roster-display"
+import { LeagueContextDashboard } from "./league-context-dashboard"
 import { SleeperAvatar } from "./sleeper-avatar"
+import { RosterDisplay } from "./roster-display" // Import RosterDisplay
 
 export function LeaguesDisplay() {
   const { leagues, isLoadingLeagues, fetchLeagues, fetchPlayers } = useSleeper()
@@ -101,10 +102,10 @@ export function LeaguesDisplay() {
                 />
               </div>
 
-              {/* Expanded Roster View */}
+              {/* Expanded League Context Dashboard */}
               {selectedLeagueId === league.league_id && (
                 <div className="mt-4 pt-4 border-t border-border" onClick={(e) => e.stopPropagation()}>
-                  <RosterDisplay leagueId={league.league_id} />
+                  <LeagueContextDashboard league={league} />
                 </div>
               )}
             </div>

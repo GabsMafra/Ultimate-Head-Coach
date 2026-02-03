@@ -17,10 +17,14 @@ import {
   History,
   Calendar,
   Info,
-  RefreshCw
+  RefreshCw,
+  Star,
+  ArrowRight,
+  ArrowLeftRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SleeperAvatar } from "./sleeper-avatar"
+import { PlayerAvatar } from "./player-avatar"
 
 interface PositionAnalysis {
   position: string
@@ -34,6 +38,7 @@ interface PositionAnalysis {
   totalTeams: number
   status: "strong" | "average" | "weak"
   players: {
+    playerId: string
     name: string
     points: number
     rank: number
@@ -42,6 +47,23 @@ interface PositionAnalysis {
 }
 
 type DataSource = "current_season" | "previous_season" | "projected"
+
+interface OptimalPlayer {
+  playerId: string
+  name: string
+  position: string
+  points: number
+  isCurrentStarter: boolean
+}
+
+interface OptimalLineup {
+  starters: OptimalPlayer[]
+  bench: OptimalPlayer[]
+  changes: {
+    add: OptimalPlayer
+    remove: OptimalPlayer
+  }[]
+}
 
 interface TeamAnalysisData {
   league: SleeperLeague
@@ -55,6 +77,7 @@ interface TeamAnalysisData {
   recommendations: string[]
   dataSource: DataSource
   dataSourceSeason: string
+  optimalLineup: OptimalLineup | null
 }
 
 interface MatchupPlayer {
@@ -375,6 +398,7 @@ export function TeamAnalysis() {
             const playerRank = allPlayersAtPos.findIndex(ap => ap.playerId === p.playerId) + 1
 
             return {
+              playerId: p.playerId,
               name: player?.full_name || "Unknown",
               points: p.points,
               rank: playerRank,
@@ -446,6 +470,83 @@ export function TeamAnalysis() {
         )
       }
 
+      // Calculate optimal lineup based on roster positions
+      const rosterPositions = league.roster_positions || []
+      const currentStarters = userRoster.starters || []
+      
+      // Get all players with their points
+      const allRosterPlayers = (userRoster.players || []).map(playerId => {
+        const player = playersData[playerId]
+        return {
+          playerId,
+          name: player?.full_name || "Unknown",
+          position: player?.position || "Unknown",
+          points: playerPoints[playerId] || 0,
+          isCurrentStarter: currentStarters.includes(playerId)
+        }
+      }).sort((a, b) => b.points - a.points)
+
+      // Calculate optimal starters based on roster positions
+      const optimalStarters: OptimalPlayer[] = []
+      const usedPlayers = new Set<string>()
+      
+      // Process each roster slot
+      for (const slot of rosterPositions) {
+        if (slot === "BN" || slot === "IR") continue
+        
+        let eligiblePositions: string[] = []
+        if (slot === "FLEX") {
+          eligiblePositions = ["RB", "WR", "TE"]
+        } else if (slot === "SUPER_FLEX") {
+          eligiblePositions = ["QB", "RB", "WR", "TE"]
+        } else if (slot === "REC_FLEX") {
+          eligiblePositions = ["WR", "TE"]
+        } else if (slot === "IDP_FLEX") {
+          eligiblePositions = ["DL", "LB", "DB"]
+        } else {
+          eligiblePositions = [slot]
+        }
+        
+        // Find best available player for this slot
+        const bestPlayer = allRosterPlayers.find(p => 
+          eligiblePositions.includes(p.position) && !usedPlayers.has(p.playerId)
+        )
+        
+        if (bestPlayer) {
+          optimalStarters.push(bestPlayer)
+          usedPlayers.add(bestPlayer.playerId)
+        }
+      }
+      
+      // Remaining players go to bench
+      const optimalBench = allRosterPlayers.filter(p => !usedPlayers.has(p.playerId))
+      
+      // Find changes needed
+      const changes: { add: OptimalPlayer; remove: OptimalPlayer }[] = []
+      
+      optimalStarters.forEach(optPlayer => {
+        if (!optPlayer.isCurrentStarter) {
+          // This player should be starting but isn't
+          // Find who is currently in that spot that should be benched
+          const currentStarterInSpot = allRosterPlayers.find(p => 
+            p.isCurrentStarter && 
+            !optimalStarters.find(opt => opt.playerId === p.playerId)
+          )
+          if (currentStarterInSpot) {
+            changes.push({
+              add: optPlayer,
+              remove: currentStarterInSpot
+            })
+          }
+        }
+      })
+
+      const optimalLineup: OptimalLineup = {
+        starters: optimalStarters,
+        bench: optimalBench,
+        changes
+      }
+
       setAnalysisData({
         league,
         roster: userRoster,
@@ -457,7 +558,8 @@ export function TeamAnalysis() {
         weaknesses,
         recommendations,
         dataSource,
-        dataSourceSeason
+        dataSourceSeason,
+        optimalLineup
       })
     } catch (error) {
       console.error("Error analyzing team:", error)
@@ -803,23 +905,27 @@ export function TeamAnalysis() {
                   {pa.players.map((player, idx) => (
                     <div 
                       key={idx}
-                      className="flex items-center justify-between text-sm"
+                      className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30"
                     >
-                      <span className="text-foreground">{player.name}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-muted-foreground">
-                          {player.points.toFixed(1)} pts
-                        </span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          player.rank <= Math.ceil(player.totalAtPosition * 0.2) 
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : player.rank <= Math.ceil(player.totalAtPosition * 0.5)
-                              ? "bg-amber-500/20 text-amber-400"
-                              : "bg-rose-500/20 text-rose-400"
-                        }`}>
-                          #{player.rank}/{player.totalAtPosition}
-                        </span>
+                      <PlayerAvatar 
+                        playerId={player.playerId} 
+                        playerName={player.name} 
+                        size={36}
+                        className="shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{player.name}</p>
+                        <p className="text-xs text-muted-foreground">{player.points.toFixed(1)} pts</p>
                       </div>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        player.rank <= Math.ceil(player.totalAtPosition * 0.2) 
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : player.rank <= Math.ceil(player.totalAtPosition * 0.5)
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-rose-500/20 text-rose-400"
+                      }`}>
+                        #{player.rank}/{player.totalAtPosition}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -867,6 +973,140 @@ export function TeamAnalysis() {
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Optimal Lineup */}
+      {analysisData.optimalLineup && (
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Star className="w-4 h-4 text-primary" />
+            Optimal Lineup
+          </h4>
+          
+          {/* Lineup Changes Needed */}
+          {analysisData.optimalLineup.changes.length > 0 ? (
+            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10">
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowLeftRight className="w-5 h-5 text-amber-400" />
+                <h5 className="font-semibold text-amber-400 font-[family-name:var(--font-display)]">
+                  Suggested Changes ({analysisData.optimalLineup.changes.length})
+                </h5>
+              </div>
+              <div className="space-y-3">
+                {analysisData.optimalLineup.changes.map((change, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-background/50">
+                    {/* Player to remove */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <PlayerAvatar 
+                        playerId={change.remove.playerId} 
+                        playerName={change.remove.name} 
+                        size={32}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm text-rose-400 font-medium truncate">{change.remove.name}</p>
+                        <p className="text-xs text-muted-foreground">{change.remove.position} - {change.remove.points.toFixed(1)} pts</p>
+                      </div>
+                    </div>
+                    
+                    <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    
+                    {/* Player to add */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <PlayerAvatar 
+                        playerId={change.add.playerId} 
+                        playerName={change.add.name} 
+                        size={32}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm text-emerald-400 font-medium truncate">{change.add.name}</p>
+                        <p className="text-xs text-muted-foreground">{change.add.position} - {change.add.points.toFixed(1)} pts</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <p className="text-sm text-emerald-400 font-medium">Your lineup is already optimized!</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Full Optimal Lineup */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Starters */}
+            <div className="p-4 rounded-xl border border-border bg-card">
+              <h5 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Optimal Starters ({analysisData.optimalLineup.starters.length})
+              </h5>
+              <div className="space-y-2">
+                {analysisData.optimalLineup.starters.map((player, idx) => (
+                  <div 
+                    key={idx}
+                    className={`flex items-center gap-2 p-2 rounded-lg ${
+                      player.isCurrentStarter ? "bg-secondary/30" : "bg-emerald-500/10 border border-emerald-500/30"
+                    }`}
+                  >
+                    <PlayerAvatar 
+                      playerId={player.playerId} 
+                      playerName={player.name} 
+                      size={28}
+                    />
+                    <span className={`px-1.5 py-0.5 text-xs font-semibold rounded border ${POSITION_COLORS[player.position] || "bg-gray-500/20 text-gray-400"}`}>
+                      {player.position}
+                    </span>
+                    <span className="text-sm text-foreground flex-1 truncate">{player.name}</span>
+                    <span className="text-xs text-muted-foreground">{player.points.toFixed(1)}</span>
+                    {!player.isCurrentStarter && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">NEW</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Bench */}
+            <div className="p-4 rounded-xl border border-border bg-card">
+              <h5 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                Bench ({analysisData.optimalLineup.bench.length})
+              </h5>
+              <div className="space-y-1.5">
+                {analysisData.optimalLineup.bench.slice(0, 8).map((player, idx) => (
+                  <div 
+                    key={idx}
+                    className={`flex items-center gap-2 p-1.5 rounded-lg ${
+                      player.isCurrentStarter ? "bg-rose-500/10 border border-rose-500/30" : "bg-secondary/20"
+                    }`}
+                  >
+                    <PlayerAvatar 
+                      playerId={player.playerId} 
+                      playerName={player.name} 
+                      size={24}
+                    />
+                    <span className={`px-1 py-0.5 text-xs font-semibold rounded border ${POSITION_COLORS[player.position] || "bg-gray-500/20 text-gray-400"}`}>
+                      {player.position}
+                    </span>
+                    <span className="text-xs text-foreground flex-1 truncate">{player.name}</span>
+                    <span className="text-xs text-muted-foreground">{player.points.toFixed(1)}</span>
+                    {player.isCurrentStarter && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400">BENCH</span>
+                    )}
+                  </div>
+                ))}
+                {analysisData.optimalLineup.bench.length > 8 && (
+                  <p className="text-xs text-muted-foreground text-center pt-1">
+                    +{analysisData.optimalLineup.bench.length - 8} more
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
