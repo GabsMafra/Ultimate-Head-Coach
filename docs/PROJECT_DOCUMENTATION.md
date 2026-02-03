@@ -6,6 +6,22 @@
 
 ---
 
+## Quick Summary
+
+| Phase | Total Features | Completed | Planned |
+|-------|---------------|-----------|---------|
+| Phase 1: Foundation | 6 | 6 | 0 |
+| Phase 2: In-Season | 10 | 3 | 7 |
+| Phase 3: Draft Tools | 17 | 0 | 17 |
+| Phase 4: Multi-League | 2 | 0 | 2 |
+| Phase 5: Offseason | 3 | 0 | 3 |
+| Phase 6: AI Features | 3 | 0 | 3 |
+| Phase 7: Settings | 2 | 0 | 2 |
+| Phase 8: Authentication | 22 | 0 | 22 |
+| **Total** | **65** | **9** | **56** |
+
+---
+
 ## Table of Contents
 
 1. [Tech Stack](#tech-stack)
@@ -280,6 +296,83 @@ const theyCanHelp = team.strengths.filter(pos => userTeam.weaknesses.includes(po
 |---------|--------|-------------|
 | Alert Preference Controls | Planned | Choose which alerts |
 | Notification Settings | Planned | Browser/mobile notifications |
+
+### Phase 8: User Authentication & Account Access - PLANNED
+
+**Goal**: Enable users to securely create accounts, log in, and recover access with minimal friction.
+
+**UX Flow**: Landing Page → Enter Sleeper Username → Validate → Sign Up/Login → Dashboard
+
+**Recommended Tech**: Supabase Auth (built-in to v0)
+
+#### Epic 1: Email/Password Sign-Up
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Sign-up UI | Planned | Email, password, confirm password form |
+| Password validation | Planned | Min 5 chars, 1 uppercase, 1 number |
+| Inline validation indicators | Planned | Live checkmarks per rule |
+| Backend signup endpoint | Planned | POST /auth/signup with bcrypt hashing |
+
+#### Epic 2: Email/Password Login
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Login UI | Planned | Email + password form |
+| Session management | Planned | JWT or HTTP-only cookies |
+| Rate limiting | Planned | Brute-force protection |
+| Auto-login persistence | Planned | Stay logged in across sessions |
+| GET /auth/me endpoint | Planned | Verify current session |
+
+#### Epic 3: Forgot/Reset Password
+| Feature | Status | Description |
+|---------|--------|-------------|
+| "Forgot password?" link | Planned | On login page |
+| Password reset request | Planned | Email input, sends reset link |
+| Secure reset token | Planned | Single-use, time-limited |
+| Reset password page | Planned | New password with same validation rules |
+
+#### Epic 4: Social & Passwordless Auth
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Google OAuth | Planned | Sign in with Google |
+| Apple OAuth | Planned | Sign in with Apple |
+| Magic link login | Planned | Email me a login link (passwordless) |
+| Account linking | Planned | Link social to existing email account |
+
+#### Epic 5: Security & Best Practices
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Password hashing | Planned | bcrypt or argon2 |
+| Email verification | Planned | Verify email after signup |
+| Abuse protection | Planned | Rate limiting, CAPTCHA after failures |
+| Generic error messages | Planned | Prevent user enumeration |
+
+#### Epic 6: UX & Edge Cases
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Error/success feedback | Planned | Friendly messages, loading states |
+| Duplicate prevention | Planned | Detect existing email during OAuth |
+| Account linking prompt | Planned | Link social + email if matching |
+
+#### Database Schema (users table)
+```
+| Column           | Type      | Description                    |
+|------------------|-----------|--------------------------------|
+| id               | UUID      | Primary key                    |
+| email            | String    | User's email (unique)          |
+| sleeper_username | String    | Linked Sleeper username        |
+| sleeper_user_id  | String    | Sleeper API user ID            |
+| email_verified   | Boolean   | Verification status            |
+| created_at       | Timestamp | Account creation date          |
+| last_login       | Timestamp | Last login timestamp           |
+```
+
+#### Implementation Priority
+| Phase | Features | Priority |
+|-------|----------|----------|
+| A | Supabase integration, email/password auth, login/signup UI | Core |
+| B | Password reset flow, email verification | Important |
+| C | Google OAuth integration | Nice-to-have |
+| D | Apple OAuth, Magic links | Optional |
 
 ---
 
